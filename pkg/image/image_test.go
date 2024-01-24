@@ -373,3 +373,43 @@ func TestImage_SquashedTree_OpaqueWhiteoutOverSymlinkKeepsTarget(t *testing.T) {
 		"the link target is a different directory and must survive; squash holds %v", squash.AllRealPaths())
 	require.True(t, squash.HasPath("/link/new.txt"), "the upper layer file should be present")
 }
+
+func TestImageRead_MaxImageSize(t *testing.T) {
+	layers := []v1.Layer{
+		layerFromTarEntries(t, tarEntry{path: "a.txt", typeFlag: tar.TypeReg, contents: "aaa"}),
+		layerFromTarEntries(t, tarEntry{path: "b.txt", typeFlag: tar.TypeReg, contents: "bbb"}),
+	}
+
+	tests := []struct {
+		name    string
+		maxSize any
+		wantErr bool
+	}{
+		{name: "no limit", maxSize: nil},
+		{name: "under the limit", maxSize: int64(6)},
+		{name: "over the limit", maxSize: int64(5), wantErr: true},
+		{name: "non int64 value is ignored", maxSize: 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v1Img, err := mutate.AppendLayers(empty.Image, layers...)
+			require.NoError(t, err)
+			img := New(v1Img, file.NewTempDirGenerator("max-size-test"), t.TempDir())
+			t.Cleanup(func() { require.NoError(t, img.Cleanup()) })
+
+			ctx := context.Background()
+			if tt.maxSize != nil {
+				//nolint:staticcheck // the string key is the public contract consumers rely on
+				ctx = context.WithValue(ctx, MaxImageSize, tt.maxSize)
+			}
+			err = img.Read(ctx)
+			if tt.wantErr {
+				require.ErrorIs(t, err, ErrImageTooLarge)
+				require.Empty(t, img.Layers)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, int64(6), img.Metadata.Size)
+		})
+	}
+}

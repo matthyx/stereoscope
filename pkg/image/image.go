@@ -30,6 +30,8 @@ import (
 	"github.com/anchore/stereoscope/pkg/filetree"
 )
 
+var ErrImageTooLarge = fmt.Errorf("image size exceeds maximum allowed size")
+
 // Image represents a container image.
 type Image struct {
 	// image is the raw image metadata and content provider from the GCR lib
@@ -377,7 +379,14 @@ func (i *Image) readLayers(ctx context.Context, layers []*Layer, fileCatalog *Fi
 		errMu     sync.Mutex
 		layerErrs = map[int]error{}
 		aborted   atomic.Bool
+		// indexedSize is checked against maxImageSize as each layer is indexed. A layer's size is
+		// only known once it has been read, so this cannot stop the layer that crosses the limit.
+		indexedSize  atomic.Int64
+		maxImageSize int64
 	)
+	if v, ok := ctx.Value(MaxImageSize).(int64); ok {
+		maxImageSize = v
+	}
 	recordErr := func(idx int, err error) {
 		errMu.Lock()
 		defer errMu.Unlock()
@@ -475,10 +484,16 @@ func (i *Image) readLayers(ctx context.Context, layers []*Layer, fileCatalog *Fi
 				return idx, nil
 			}
 			err := layers[idx].index(fileCatalog)
+			tooLarge := err == nil && maxImageSize > 0 && indexedSize.Add(layers[idx].Metadata.Size) > maxImageSize
 			// open the gate either way: squash decides what to do with the outcome
-			gates.done(idx, err == nil)
+			gates.done(idx, err == nil && !tooLarge)
 			if err != nil {
 				recordErr(idx, fmt.Errorf("failed to index layer %d: %w", idx, err))
+				return idx, nil
+			}
+			if tooLarge {
+				// aborts the fetch stage too, so no layer past the limit is downloaded
+				recordErr(idx, ErrImageTooLarge)
 				return idx, nil
 			}
 			readProg.Increment()
