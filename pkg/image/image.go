@@ -1,6 +1,7 @@
 package image
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"io"
@@ -21,6 +22,8 @@ import (
 	"github.com/anchore/stereoscope/pkg/file"
 	"github.com/anchore/stereoscope/pkg/filetree"
 )
+
+var ErrImageTooLarge = fmt.Errorf("image size exceeds maximum allowed size")
 
 // Image represents a container image.
 type Image struct {
@@ -195,7 +198,11 @@ func (i *Image) applyOverrideMetadata() error {
 
 // Read parses information from the underlying image tar into this struct. This includes image metadata, layer
 // metadata, layer file trees, and layer squash trees (which implies the image squash tree).
-func (i *Image) Read() error {
+func (i *Image) Read(ctx context.Context) error {
+	var maxImageSize int64
+	if k := ctx.Value(MaxImageSize); k != nil {
+		maxImageSize = k.(int64)
+	}
 	var layers = make([]*Layer, 0)
 	var err error
 	i.Metadata, err = readImageMetadata(i.image)
@@ -230,6 +237,10 @@ func (i *Image) Read() error {
 			return err
 		}
 		i.Metadata.Size += layer.Metadata.Size
+		// unfortunately we cannot check the size before we gunzip the layer
+		if maxImageSize > 0 && i.Metadata.Size > maxImageSize {
+			return ErrImageTooLarge
+		}
 		layers = append(layers, layer)
 
 		readProg.Increment()
