@@ -26,6 +26,8 @@ type RegistryOptions struct {
 	CAFileOrDir           string
 }
 
+const MaxImageSize = "maxImageSize"
+
 type credentialSelection struct {
 	credentials RegistryCredentials
 	index       int

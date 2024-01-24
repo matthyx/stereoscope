@@ -44,7 +44,7 @@ func TestSingularityImageProvider_Provide(t *testing.T) {
 			}
 
 			if err == nil {
-				if err := i.Read(); err != nil {
+				if err := i.Read(context.TODO()); err != nil {
 					t.Fatal(err)
 				}
 			}
