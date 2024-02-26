@@ -2,6 +2,7 @@ package oci
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +19,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/random"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/google/go-containerregistry/pkg/v1/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -425,4 +427,67 @@ type mockRoundTripper struct {
 
 func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return m.resp, m.err
+}
+
+// schema1Manifest is a docker schema1 manifest naming blobs that are already in the registry.
+type schema1Manifest []byte
+
+func (m schema1Manifest) RawManifest() ([]byte, error) { return m, nil }
+
+func (m schema1Manifest) MediaType() (types.MediaType, error) {
+	return types.DockerManifestSchema1, nil
+}
+
+func pushSchema1RegistryImage(t *testing.T, registryHost, repo, tag string) {
+	t.Helper()
+
+	img, err := random.Image(1024, 2)
+	require.NoError(t, err)
+
+	opts := []name.Option{name.Insecure, name.WithDefaultRegistry(registryHost)}
+	ref, err := name.ParseReference(repo+":blobs", opts...)
+	require.NoError(t, err)
+	require.NoError(t, remote.Write(ref, img))
+
+	// schema1 lists its layers top first
+	layers, err := img.Layers()
+	require.NoError(t, err)
+	var fsLayers []map[string]string
+	for i := len(layers) - 1; i >= 0; i-- {
+		dig, err := layers[i].Digest()
+		require.NoError(t, err)
+		fsLayers = append(fsLayers, map[string]string{"blobSum": dig.String()})
+	}
+	raw, err := json.Marshal(map[string]any{"schemaVersion": 1, "fsLayers": fsLayers})
+	require.NoError(t, err)
+
+	tagRef, err := name.NewTag(repo+":"+tag, opts...)
+	require.NoError(t, err)
+	require.NoError(t, remote.Put(tagRef, schema1Manifest(raw)))
+}
+
+func Test_Registry_Provide_Schema1(t *testing.T) {
+	registryHost := makeRegistry(t)
+	pushSchema1RegistryImage(t, registryHost, "schema1/image", "latest")
+	imageStr := registryHost + "/schema1/image:latest"
+
+	tests := []struct {
+		name     string
+		platform *image.Platform
+	}{
+		{name: "no platform requested", platform: nil},
+		{name: "platform requested", platform: &image.Platform{OS: "linux", Architecture: runtime.GOARCH}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			generator := file.TempDirGenerator{}
+			t.Cleanup(func() { require.NoError(t, generator.Cleanup()) })
+			provider := NewRegistryProvider(&generator, image.RegistryOptions{InsecureUseHTTP: true}, imageStr, tt.platform)
+
+			img, err := provider.Provide(context.Background())
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, img.Cleanup()) })
+			assert.Len(t, img.Layers, 2)
+		})
+	}
 }

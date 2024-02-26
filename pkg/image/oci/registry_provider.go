@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
+	containerregistryV1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	containerregistryV1Types "github.com/google/go-containerregistry/pkg/v1/types"
 
@@ -125,7 +126,16 @@ func (p *registryImageProvider) Provide(ctx context.Context) (*image.Image, erro
 	p.finalizePlatform(descriptor, &platform)
 
 	img, err := descriptor.Image()
-	if err != nil {
+	if errors.Is(err, remote.ErrSchema1) {
+		// schema1 has no config, so its synthesized one takes the platform from the descriptor
+		if platform != nil {
+			descriptor.Platform = &containerregistryV1.Platform{Architecture: platform.Architecture, OS: platform.OS}
+		}
+		img, err = descriptor.Schema1()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get image from registry (schemav1 fallback): %+v", err)
+		}
+	} else if err != nil {
 		return nil, fmt.Errorf("failed to get image from registry: %+v", err)
 	}
 

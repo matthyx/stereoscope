@@ -167,3 +167,5 @@ require (
 	google.golang.org/grpc v1.83.2 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )
+
+replace github.com/google/go-containerregistry => github.com/matthyx/go-containerregistry v0.0.0-20261028145237-d59d58c6328d
