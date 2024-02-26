@@ -126,4 +126,9 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-require github.com/containerd/errdefs/pkg v0.3.0 // indirect
+require (
+	github.com/containerd/errdefs/pkg v0.3.0 // indirect
+	github.com/moby/sys/atomicwriter v0.1.0 // indirect
+)
+
+replace github.com/google/go-containerregistry => github.com/matthyx/go-containerregistry v0.0.0-20240227132928-63ceb71ae0b9
