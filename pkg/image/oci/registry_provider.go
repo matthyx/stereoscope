@@ -3,6 +3,7 @@ package oci
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net/http"
 	"runtime"
@@ -65,7 +66,12 @@ func (p *registryImageProvider) Provide(ctx context.Context) (*image.Image, erro
 	}
 
 	img, err := descriptor.Image()
-	if err != nil {
+	if errors.Is(err, remote.ErrSchema1) {
+		img, err = descriptor.Schema1()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get image from registry (schemav1 fallback): %+v", err)
+		}
+	} else if err != nil {
 		return nil, fmt.Errorf("failed to get image from registry: %+v", err)
 	}
 

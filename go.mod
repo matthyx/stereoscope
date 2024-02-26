@@ -122,3 +122,5 @@ require (
 	go.opentelemetry.io/otel/metric v1.19.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230711160842-782d3b101e98 // indirect
 )
+
+replace github.com/google/go-containerregistry => github.com/matthyx/go-containerregistry v0.0.0-20240227132928-63ceb71ae0b9
