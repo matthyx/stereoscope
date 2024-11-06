@@ -121,6 +121,8 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
+require github.com/ncw/directio v1.0.5
+
 replace github.com/gabriel-vasile/mimetype v1.4.4 => github.com/anchore/mimetype v0.0.0-20240710165720-f966690755a5
 
 replace github.com/google/go-containerregistry => github.com/matthyx/go-containerregistry v0.0.0-20240227132928-63ceb71ae0b9
