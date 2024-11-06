@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"syscall"
 )
 
 var _ io.ReadCloser = (*LazyReadCloser)(nil)
@@ -69,6 +70,6 @@ func (d *LazyReadCloser) openFile() error {
 	}
 
 	var err error
-	d.file, err = os.Open(d.path)
+	d.file, err = os.OpenFile(d.path, syscall.O_DIRECT|os.O_RDONLY, 0) // FIXME do it
 	return err
 }

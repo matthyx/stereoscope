@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/sylabs/squashfs"
@@ -128,7 +129,7 @@ func NewMetadataFromPath(path string, info os.FileInfo) Metadata {
 	ty := TypeFromMode(info.Mode())
 
 	if ty == TypeRegular {
-		f, err := os.Open(path)
+		f, err := os.OpenFile(path, syscall.O_DIRECT|os.O_RDONLY, 0)
 		if err != nil {
 			// TODO: it may be that the file is inaccessible, however, this is not an error or a warning. In the future we need to track these as known-unknowns
 			f = nil
@@ -140,7 +141,7 @@ func NewMetadataFromPath(path string, info os.FileInfo) Metadata {
 			}()
 		}
 
-		mimeType = MIMEType(f)
+		mimeType = MIMEType(NewDirectIOReader(f))
 	}
 
 	return Metadata{
